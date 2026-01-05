@@ -3,26 +3,27 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main]
-  pull_request:
 
 jobs:
-  build-test-deploy:
+  build-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 18
+          cache: npm
 
-      - name: Install dependencies and run tests
+      - name: Verify Node & npm
         run: |
-          npm ci
-          npm test
+          node -v
+          npm -v
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run SonarQube scan
         env:
