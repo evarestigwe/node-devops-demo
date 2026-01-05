@@ -3,36 +3,65 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main]
+  pull_request:
 
 jobs:
-  build-test:
+  build-test-deploy:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: npm
+          cache: 'npm'
 
       - name: Verify Node & npm
         run: |
+          echo "PATH=$PATH"
+          which node || echo "node not found"
+          which npm || echo "npm not found"
           node -v
           npm -v
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Set working directory
+        id: vars
+        run: |
+          # Detect folder containing package.json
+          PACKAGE_DIR=$(find . -name package.json -type f -exec dirname {} \; | head -n 1)
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> $GITHUB_ENV
+          echo "Using working directory: $PACKAGE_DIR"
 
-      - name: Run SonarQube scan
+      - name: Install dependencies
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "Lock file found. Running npm ci"
+            npm ci
+          else
+            echo "No lock file found. Running npm install"
+            npm install
+          fi
+
+      - name: Run tests
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: npm test
+
+      - name: SonarQube scan
+        working-directory: ${{ env.PACKAGE_DIR }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          npm run sonar
+        run: npm run sonar
 
-      - name: Login to container registry
+      - name: Docker login
         env:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: |
@@ -43,6 +72,6 @@ jobs:
         run: |
           docker build -t ${{ secrets.REGISTRY }}/service-a:${{ github.sha }} .
 
-      - name: Push image
+      - name: Push Docker image
         run: |
           docker push ${{ secrets.REGISTRY }}/service-a:${{ github.sha }}
